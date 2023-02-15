@@ -1,10 +1,29 @@
-import Heroes;
-import Coins;
+import Coins.Coin;
+import Coins.GoldCoin;
+import Coins.StandardCoin;
+import Coins.WrongCoin;
+import Heroes.Snake;
+import Heroes.SnakeEnemy;
+import Heroes.SnakeHero;
+import Objects.Bomb;
+import Objects.MapObject;
+import org.w3c.dom.*;
 
 import javax.swing.*;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Random;
 
 public class GamePanel extends JPanel implements ActionListener {
@@ -14,24 +33,30 @@ public class GamePanel extends JPanel implements ActionListener {
     private final int MAP_WIDTH = 10000;
     private final int MAP_HEIGHT = 10000;
     private final int UNIT_SIZE = 50;
-    private final int DELAY = 1;
     private final int MIN_NUM_OF_COINS = 10000;
-    private Timer timer;
+    private int MIN_NUM_OF_BOMBS = 500;
+    private final Timer timer;
     private Random random;
     private int level = 0;
 
     private Snake hero;
     private ArrayList<Snake> enemies;
+    private int enemiesCount;
     private ArrayList<Coin> coins;
-    private boolean[][] hashTableCoins;
+    private ArrayList<Bomb> bombs;
+    private boolean[][] hashTableMapObjects;
 
     Color resultColor;
     private int previousResult;
     
-    enum GameState {NEW_HIGH_SCORE, LOST, PLAY, START}
+    enum GameState {NEW_HIGH_SCORE, LOST, PLAY, START, PAUSE}
     private GameState gamestate = GameState.START;
 
     private int instructionPeriod = 0;
+    private int moveMapPosition = 0;
+
+    private int highScore;
+    private String resultHistoryFileName = "./results";
 
     public GamePanel(){
         this.setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
@@ -39,8 +64,14 @@ public class GamePanel extends JPanel implements ActionListener {
         this.setFocusable(true);
         this.addKeyListener(new MyKeyAdapter());
 
+        final int DELAY = 10;
         this.timer = new Timer(DELAY, this);
         timer.start();
+
+        ArrayList<Result> results = loadResults();
+        results.sort(Collections.reverseOrder());
+        if(results.size() > 0)
+            highScore = results.get(0).getLength();
     }
 
     public void prepareGame()
@@ -48,6 +79,10 @@ public class GamePanel extends JPanel implements ActionListener {
         this.random = new Random();
         hero = new SnakeHero(MAP_WIDTH / 2, MAP_HEIGHT / 2, Color.magenta, Color.GRAY, Color.blue);
         prepareCoins();
+        prepareBombs();
+        enemiesCount = (level + 1) * 7;
+        MIN_NUM_OF_BOMBS = (level + 1) * 500;
+        prepareEnemies();
 
         resultColor = Color.lightGray;
         previousResult = hero.getLength();
@@ -74,19 +109,32 @@ public class GamePanel extends JPanel implements ActionListener {
 
                 if (x_right == MAP_WIDTH) x_left = MAP_WIDTH - SCREEN_WIDTH;
                 if (y_down == MAP_HEIGHT) y_up = MAP_HEIGHT - SCREEN_HEIGHT;
-                if (x_right < SCREEN_WIDTH) x_right = SCREEN_WIDTH;
-                if (y_down < SCREEN_HEIGHT) y_down = SCREEN_HEIGHT;
+                if (x_right <= SCREEN_WIDTH) x_right = SCREEN_WIDTH;
+                if (y_down <= SCREEN_HEIGHT) y_down = SCREEN_HEIGHT;
 
-                drawMap(x_left, x_right, y_up, y_down, g);
+                drawMap(x_left, y_up, g);
+                drawBorders(x_left, x_right, y_up, y_down, g);
                 drawCoins(x_left, x_right, y_up, y_down, g);
+                drawBombs(x_left, x_right, y_up, y_down, g);
                 drawHero(x_left, x_right, y_up, y_down, g);
+                drawEnemies(x_left, y_up, g);
                 drawResult(g);
                 break;
             case LOST:
-                drawMap(UNIT_SIZE, SCREEN_WIDTH + UNIT_SIZE, UNIT_SIZE, SCREEN_HEIGHT + UNIT_SIZE, g);
+                drawMovingMap(g);
+                g.setColor(new Color(220, 80, 80, 127));
+                g.fillRoundRect(200, 80, 400, 330, 30, 30);
+                g.setColor(new Color(255, 20, 20));
+                Font info = new Font ("Courier New", Font.BOLD, 65);
+                g.setFont(info);
+                g.drawString("You lost", 245, 150);
+
+                drawScore(g, hero.getLength());
+                drawInstruction(g, "Press space to play again");
+                drawSecondInstruction(g, "Press shift to return to menu");
                 break;
             case START:
-                drawMap(UNIT_SIZE, SCREEN_WIDTH + UNIT_SIZE, UNIT_SIZE, SCREEN_HEIGHT + UNIT_SIZE, g);
+                drawMovingMap(g);
                 g.setColor(Color.BLUE);
                 Font title = new Font ("Courier New", Font.BOLD, 65);
                 g.setFont(title);
@@ -97,27 +145,88 @@ public class GamePanel extends JPanel implements ActionListener {
                 snake.draw(g, SCREEN_WIDTH / 2 - snake.getThickness() / 2,
                         SCREEN_HEIGHT / 2 - snake.getThickness() / 2);
 
-                drawInstruction(g);
+                drawInstruction(g, "Press space to start game");
                 drawLevels(g);
                 drawHighScores(g);
 
                 break;
             case NEW_HIGH_SCORE:
-                drawMap(UNIT_SIZE, SCREEN_WIDTH + UNIT_SIZE, UNIT_SIZE, SCREEN_HEIGHT + UNIT_SIZE, g);
+                drawMovingMap(g);
+                g.setColor(new Color(95, 192, 63, 127));
+                g.fillRoundRect(190, 80, 420, 330, 30, 30);
+                g.setColor(new Color(10, 130, 10));
+                Font info2 = new Font ("Courier New", Font.BOLD, 65);
+                g.setFont(info2);
+                g.drawString("High score!", 205, 150);
+
+                drawScore(g, hero.getLength());
+                drawInstruction(g, "Press space to play again");
+                drawSecondInstruction(g, "Press shift to return to menu");
+                break;
+
+            case PAUSE:
+                drawMovingMap(g);
+                g.setColor(new Color(200, 200, 200));
+                Font info3 = new Font ("Courier New", Font.BOLD, 100);
+                g.setFont(info3);
+                g.drawString("Pause", 245, 200);
+                drawInstruction(g, "Press space to restart game");
+                drawSecondInstruction(g, "Press shift to return to menu");
+        }
+    }
+
+    public void drawScore(Graphics g, int result)
+    {
+        // score
+        g.setColor(new Color(230, 230, 230));
+        Font font = new Font ("Courier New", Font.BOLD, 95);
+        g.setFont(font);
+        FontMetrics metrics = g.getFontMetrics(font);
+        String text = Integer.toString(result);
+        Rectangle rect = new Rectangle(200, 280, 400, 10);
+        g.drawString( text, rect.x + (rect.width - metrics.stringWidth(text)) / 2, 280);
+
+        // level stars
+        g.setColor(Color.yellow);
+        g.setFont(new Font ("Console", Font.BOLD, 80));
+        String stars = "";
+        for(int i = 0; i < level + 1; ++i) stars += "\u2605";
+        switch(level){
+            case 0:
+                g.drawString(stars, 365, 380);
+                break;
+            case 1:
+                g.drawString(stars, 330, 380);
+                break;
+            case 2:
+                g.drawString(stars, 296, 380);
+                break;
+            default:
+                g.drawString(stars, 260, 380);
                 break;
         }
     }
 
-    public void drawInstruction(Graphics g)
+    public void drawInstruction(Graphics g, String info)
     {
         if(instructionPeriod % 80 < 40) {
             g.setColor(Color.cyan);
             Font instruction = new Font("Courier New", Font.BOLD, 35);
             g.setFont(instruction);
-            g.drawString("Press space to start game", 140, 450);
+            FontMetrics metrics = g.getFontMetrics(instruction);
+            Rectangle rect = new Rectangle(0, 470, SCREEN_WIDTH, 10);
+            g.drawString( info, rect.x + (rect.width - metrics.stringWidth(info)) / 2, 470);
         }
         else if(instructionPeriod == 79) instructionPeriod = 0;
         instructionPeriod++;
+    }
+
+    public void drawSecondInstruction(Graphics g, String info)
+    {
+        g.setColor(new Color(200, 200, 200));
+        Font instruction = new Font("Courier New", Font.BOLD, 20);
+        g.setFont(instruction);
+        g.drawString(info, 225, 530);
     }
 
     public void drawLevels(Graphics g)
@@ -131,7 +240,7 @@ public class GamePanel extends JPanel implements ActionListener {
         g.setFont(new Font ("Console", Font.BOLD, 14));
         g.setColor(Color.WHITE);
         g.drawString("Choose level \u25B2 \u25BC", 120, 240);
-        g.setFont(new Font ("Console", Font.PLAIN, 13));
+        g.setFont(new Font ("Console", Font.BOLD, 13));
         g.drawString("Easy", 120, 268);
         g.drawString("Medium", 120, 298);
         g.drawString("Hard", 120, 328);
@@ -147,20 +256,44 @@ public class GamePanel extends JPanel implements ActionListener {
 
     public void drawHighScores(Graphics g)
     {
+        ArrayList<Result> results = loadResults();
+        results.sort(Collections.reverseOrder());
+
         g.setColor(new Color(173, 216, 230));
         g.fill3DRect(SCREEN_WIDTH - 262, 218, 150, 150, true);
 
-        g.setFont(new Font ("Console", Font.PLAIN, 14));
+        // Results
+        g.setFont(new Font ("Console", Font.BOLD, 14));
         g.setColor(Color.WHITE);
         g.drawString("Top 3 scores", SCREEN_WIDTH - 230, 240);
-        g.setFont(new Font ("Console", Font.PLAIN, 13));
-        g.drawString("1. ", SCREEN_WIDTH - 256, 268);
-        g.drawString("2. ", SCREEN_WIDTH - 256, 298);
-        g.drawString("3. ", SCREEN_WIDTH - 256, 328);
-        g.drawString("4. ", SCREEN_WIDTH - 256, 358);
+        g.setFont(new Font ("Console", Font.BOLD, 13));
+        if(results.size() > 0)
+            highScore = results.get(0).getLength();
+        for(int i = 0; i < results.size() && i < 3; ++i)
+        {
+            g.drawString((i + 1) + ".  " + results.get(i).getLength(), SCREEN_WIDTH - 250, 268 + i * 30);
+        }
+
+        // Average
+        int average = 0;
+        for(var r : results) average += r.getLength();
+        if(results.size() > 0) average = average / results.size();
+        else average = 0;
+        g.setFont(new Font ("Console", Font.BOLD, 14));
+        g.drawString("Average: " + average, SCREEN_WIDTH - 250, 268 + 3 * 30);
+
+        // Level stars
+        g.setColor(Color.yellow);
+        g.setFont(new Font ("Console", Font.PLAIN, 15));
+        for(int i = 0; i < results.size() && i < 3; ++i)
+        {
+            String stars = "";
+            for(int j = 0; j < results.get(i).getLevel() + 1; ++j) stars += " \u2605";
+            g.drawString(stars, SCREEN_WIDTH - 190, 268 + i * 30);
+        }
     }
 
-    private void drawMap(int x_left, int x_right, int y_up, int y_down, Graphics g)
+    private void drawMap(int x_left, int y_up, Graphics g)
     {
         for(int x = 0; x < MAP_WIDTH; x += UNIT_SIZE)
         {
@@ -180,7 +313,18 @@ public class GamePanel extends JPanel implements ActionListener {
                         Math.min(yDiff + UNIT_SIZE, UNIT_SIZE));
             }
         }
+    }
 
+    public void drawMovingMap(Graphics g)
+    {
+        int y = MAP_HEIGHT - SCREEN_HEIGHT - moveMapPosition;
+        drawMap(UNIT_SIZE, y, g);
+        ++moveMapPosition;
+        if(moveMapPosition == 2 * UNIT_SIZE) moveMapPosition = 0;
+    }
+
+    public void drawBorders(int x_left, int x_right, int y_up, int y_down, Graphics g)
+    {
         g.setColor(Color.orange);
         if(x_left <= UNIT_SIZE)
             g.fillRect(0, 0, UNIT_SIZE - x_left, SCREEN_HEIGHT);
@@ -202,24 +346,29 @@ public class GamePanel extends JPanel implements ActionListener {
         coins.forEach(c -> c.draw(x_left, x_right, y_up, y_down, g));
     }
 
+    private void drawBombs(int x_left, int x_right, int y_up, int y_down, Graphics g)
+    {
+        bombs.forEach(c -> c.draw(x_left, x_right, y_up, y_down, g));
+    }
+
     private void drawHero(int x_left, int x_right, int y_up, int y_down, Graphics g)
     {
         int x = SCREEN_WIDTH / 2 - hero.getThickness() / 2;
         int y = SCREEN_HEIGHT / 2 - hero.getThickness() / 2;
         if(x_left == 0)
-            x = hero.positionX;
+            x = hero.positionX - hero.getThickness() / 2;
         if(x_right == MAP_WIDTH)
-            x = SCREEN_WIDTH - (x_right - hero.positionX);
+            x = SCREEN_WIDTH - (x_right - hero.positionX) - hero.getThickness() / 2;
         if(y_up == 0)
-            y = hero.positionY;
+            y = hero.positionY - hero.getThickness() / 2;
         if(y_down == MAP_HEIGHT)
-            y = SCREEN_HEIGHT - (y_down - hero.positionY);
+            y = SCREEN_HEIGHT - (y_down - hero.positionY) - hero.getThickness() / 2;
         hero.draw(g, x, y);
     }
 
-    public void drawEnemies(int x_left, int x_right, int y_up, int y_down, Graphics g)
+    public void drawEnemies(int x_left, int y_up, Graphics g)
     {
-
+        enemies.forEach(r -> r.draw(g, x_left, y_up));
     }
 
     public void drawResult(Graphics g)
@@ -244,13 +393,27 @@ public class GamePanel extends JPanel implements ActionListener {
     }
     public void moveEnemies()
     {
-
+        enemies.forEach(Snake::move);
     }
 
     public void checkCollisions()
     {
-        if(hero.checkCollisions(coins, hashTableCoins, UNIT_SIZE, MAP_WIDTH, MAP_HEIGHT))
+        if(hero.checkCollisions(coins, hashTableMapObjects, UNIT_SIZE, MAP_WIDTH, MAP_HEIGHT, enemies, bombs))
             endGame();
+        for(int i = 0; i < enemies.size(); ++i)
+        {
+            Snake enemy = enemies.get(i);
+            ArrayList<Snake> snakes = new ArrayList<>();
+            snakes.add(hero);
+            for(int j = 0; j < enemies.size(); ++j) {
+                if(i != j)
+                    snakes.add(enemies.get(j));
+            }
+            if(enemy.checkCollisions(coins, hashTableMapObjects, UNIT_SIZE, MAP_WIDTH, MAP_HEIGHT, snakes, bombs))
+            {
+                enemies.remove(enemy);
+            }
+        }
     }
 
     private Coin generateCoin(Point p)
@@ -261,29 +424,71 @@ public class GamePanel extends JPanel implements ActionListener {
         return new GoldCoin(p);
     }
 
-    private void addCoin(){
+    private Point getFreePlace()
+    {
         int x, y;
         do {
             x = random.nextInt(MAP_WIDTH - 2 * UNIT_SIZE) + UNIT_SIZE;
             y = random.nextInt(MAP_HEIGHT - 2 * UNIT_SIZE) + UNIT_SIZE;
-        }while(hashTableCoins[x][y]);
-        hashTableCoins[x][y] = true;
-        Coin coin = generateCoin(new Point(x, y));
+        }while(hashTableMapObjects[x][y]);
+        hashTableMapObjects[x][y] = true;
+        return new Point(x, y);
+    }
+
+    private void setPoint(MapObject mapObject, Point point, int xx, int yy)
+    {
+        if(xx > MAP_WIDTH - UNIT_SIZE)
+            mapObject.setPoint(new Point(point.x - (xx - (MAP_WIDTH - UNIT_SIZE)), point.y));
+        if(yy > MAP_HEIGHT - UNIT_SIZE)
+            mapObject.setPoint(new Point(point.x, point.y - (yy - (MAP_HEIGHT - UNIT_SIZE))));
+    }
+    private void addCoin(){
+        Point point = getFreePlace();
+        Coin coin = generateCoin(point);
         int xx = coin.getPoint().x + coin.getSize();
         int yy = coin.getPoint().y + coin.getSize();
-        if(xx > MAP_WIDTH - UNIT_SIZE)
-            coin.setPoint(new Point(x - (xx - (MAP_WIDTH - UNIT_SIZE)), y));
-        if(yy > MAP_HEIGHT - UNIT_SIZE)
-            coin.setPoint(new Point(x, y - (yy - (MAP_HEIGHT - UNIT_SIZE))));
+        setPoint(coin, point, xx, yy);
         coins.add(coin);
+    }
+
+    private void addBomb()
+    {
+        Point point = getFreePlace();
+        Bomb bomb = new Bomb(point);
+        int xx = bomb.getPoint().x + Bomb.getSize();
+        int yy = bomb.getPoint().y + Bomb.getSize();
+        setPoint(bomb, point, xx, yy);
+        bombs.add(bomb);
     }
 
     private void prepareCoins(){
 
-        hashTableCoins = new boolean[MAP_WIDTH][MAP_HEIGHT];
+        hashTableMapObjects = new boolean[MAP_WIDTH][MAP_HEIGHT];
         coins = new ArrayList<>();
         for(int i = 0; i < MIN_NUM_OF_COINS; i++)
             addCoin();
+    }
+
+    private void prepareBombs(){
+        bombs = new ArrayList<>();
+        for(int i = 0; i < MIN_NUM_OF_BOMBS; i++)
+            addBomb();
+    }
+
+    private void prepareEnemies()
+    {
+        enemies = new ArrayList<>();
+        for(int i = 0; i < enemiesCount; ++i)
+        {
+            generateEnemy();
+        }
+    }
+
+    private void generateEnemy() {
+        int x = UNIT_SIZE + random.nextInt(MAP_WIDTH - 2 * UNIT_SIZE);
+        int y = UNIT_SIZE + random.nextInt(MAP_HEIGHT - 2 * UNIT_SIZE);
+        enemies.add(new SnakeEnemy(x, y, Color.BLACK, Color.WHITE, null, UNIT_SIZE,
+                SCREEN_WIDTH, SCREEN_HEIGHT, MAP_WIDTH, MAP_HEIGHT, level));
     }
 
     public void updateCoins()
@@ -293,24 +498,136 @@ public class GamePanel extends JPanel implements ActionListener {
             addCoin();
     }
 
+    private void updateBombs()
+    {
+        if(bombs.size() >= MIN_NUM_OF_BOMBS) return;
+        for(int i = MIN_NUM_OF_BOMBS - coins.size(); i > 0; --i)
+            addBomb();
+    }
+
+    public void updateEnemies()
+    {
+        if(enemies.size() >= enemiesCount) return;
+        for(int i = enemiesCount - enemies.size(); i > 0; --i)
+        {
+            generateEnemy();
+        }
+    }
+
     @Override
     public void actionPerformed(ActionEvent e) {
 
         if(gamestate == GameState.PLAY)
         {
-            hero.move();
+            if(hero != null && hero.getLength() <= 0) {
+                hero.setLength(0);
+                endGame();
+            }
+            if(hero != null)
+                hero.move();
             moveEnemies();
             checkCollisions();
             updateCoins();
+            updateBombs();
+            updateEnemies();
         }
         repaint();
     }
 
     private void endGame(){
-        timer.stop();
-        gamestate = GameState.LOST;
-        Result result = new Result(hero.getLength(), level);
+        int currentResult = hero.getLength();
+        if(currentResult > highScore) {
+            gamestate = GameState.NEW_HIGH_SCORE;
+            highScore = currentResult;
+        }
+        else {
+            gamestate = GameState.LOST;
+        }
+        Result newResult = new Result(hero.getLength(), level);
+        saveResult(newResult);
+    }
 
+    public void saveResult(Result result)
+    {
+        try {
+            File file = new File(resultHistoryFileName);
+            DocumentBuilderFactory documentFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder documentBuilder = documentFactory.newDocumentBuilder();
+            Document document;
+            Element root;
+            try {
+                document = documentBuilder.parse(file);
+                document.getDocumentElement().normalize();
+                root = document.getDocumentElement();
+            }
+            catch(Exception e) {
+                document = documentBuilder.newDocument();
+
+                root = document.createElement("root");
+                document.appendChild(root);
+            }
+
+            // result element
+            Element res = document.createElement("result");
+            root.appendChild(res);
+
+            // level element
+            Element level = document.createElement("level");
+            level.appendChild(document.createTextNode(Integer.toString(result.getLevel())));
+            res.appendChild(level);
+
+            // length element
+            Element length = document.createElement("length");
+            length.appendChild(document.createTextNode(Integer.toString(result.getLength())));
+            res.appendChild(length);
+
+            // create the xml file
+            //transform the DOM Object to an XML File
+            TransformerFactory transformerFactory = TransformerFactory.newInstance();
+            Transformer transformer = transformerFactory.newTransformer();
+            DOMSource domSource = new DOMSource(document);
+            StreamResult streamResult = new StreamResult(new File(resultHistoryFileName));
+
+            transformer.transform(domSource, streamResult);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public ArrayList<Result> loadResults()
+    {
+        ArrayList<Result> results = new ArrayList<>();
+        try
+        {
+            File file = new File(resultHistoryFileName);
+            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+            DocumentBuilder db = dbf.newDocumentBuilder();
+            Document doc = db.parse(file);
+            doc.getDocumentElement().normalize();
+            NodeList nodeList = doc.getElementsByTagName("result");
+
+            for (int itr = 0; itr < nodeList.getLength(); itr++)
+            {
+                Node node = nodeList.item(itr);
+                if (node.getNodeType() == Node.ELEMENT_NODE)
+                {
+                    Element element = (Element) node;
+
+                    Node node1 = element.getElementsByTagName("level").item(0);
+                    String level = node1.getTextContent();
+
+                    Node node2 = element.getElementsByTagName("length").item(0);
+                    String length = node2.getTextContent();
+
+                    results.add(new Result(Integer.parseInt(length), Integer.parseInt(level)));
+                }
+            }
+        }
+        catch(Exception e){
+            System.out.println("There is no result history file or there is problem with parsing results.xml.");
+        }
+        return results;
     }
 
     public class MyKeyAdapter extends KeyAdapter{
@@ -318,9 +635,18 @@ public class GamePanel extends JPanel implements ActionListener {
         @Override
         public void keyPressed(KeyEvent event)
         {
-            if(gamestate != GameState.PLAY && event.getKeyCode() == KeyEvent.VK_SPACE){
-                prepareGame();
-                startGame();
+            if(gamestate != GameState.PLAY && gamestate != GameState.PAUSE){
+
+                switch(event.getKeyCode())
+                {
+                    case KeyEvent.VK_SPACE:
+                        prepareGame();
+                        startGame();
+                        break;
+                    case KeyEvent.VK_SHIFT:
+                        gamestate = GameState.START;
+                        break;
+                }
             }
 
             if(gamestate == GameState.PLAY)
@@ -328,20 +654,27 @@ public class GamePanel extends JPanel implements ActionListener {
                 switch(event.getKeyCode())
                 {
                     case KeyEvent.VK_LEFT:
+                    case KeyEvent.VK_A:
                         if(hero.direction != Snake.Direction.RIGHT)
                             hero.direction = Snake.Direction.LEFT;
                         break;
                     case KeyEvent.VK_RIGHT:
+                    case KeyEvent.VK_D:
                         if(hero.direction != Snake.Direction.LEFT)
                             hero.direction = Snake.Direction.RIGHT;
                         break;
                     case KeyEvent.VK_UP:
+                    case KeyEvent.VK_W:
                         if(hero.direction != Snake.Direction.DOWN)
                             hero.direction = Snake.Direction.UP;
                         break;
                     case KeyEvent.VK_DOWN:
+                    case KeyEvent.VK_S:
                         if(hero.direction != Snake.Direction.UP)
                             hero.direction = Snake.Direction.DOWN;
+                        break;
+                    case KeyEvent.VK_ENTER:
+                        gamestate = GameState.PAUSE;
                         break;
                 }
             }
@@ -358,6 +691,18 @@ public class GamePanel extends JPanel implements ActionListener {
                 }
             }
 
+            if(gamestate == GameState.PAUSE)
+            {
+                switch(event.getKeyCode())
+                {
+                    case KeyEvent.VK_SPACE:
+                        gamestate = GameState.PLAY;
+                        break;
+                    case KeyEvent.VK_SHIFT:
+                        gamestate = GameState.START;
+                        break;
+                }
+            }
         }
     }
 }

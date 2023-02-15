@@ -1,5 +1,8 @@
 package Heroes;
 
+import Coins.Coin;
+import Objects.Bomb;
+
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Random;
@@ -12,7 +15,7 @@ public abstract class Snake {
     protected int length = 50;
     private final int MIN_THICKNESS = 10;
     private final int MAX_THICKNESS = 30;
-    private int thickness = MIN_THICKNESS;
+    protected int thickness = MIN_THICKNESS;
     protected final int speed = 2;
     public enum Direction {LEFT, RIGHT, UP, DOWN}
     public Direction direction;
@@ -27,6 +30,8 @@ public abstract class Snake {
     public int getLength() {
         return length;
     }
+
+    public void setLength(int length){this.length = length; }
 
     public void setStripesThickness(int stripesThickness) {
         this.stripesThickness = stripesThickness;
@@ -48,6 +53,8 @@ public abstract class Snake {
 
     // Abstract methods
     public abstract void preparePositions();
+    public abstract void move();
+    public abstract void draw(Graphics g, int x, int y);
     public void grow(int additionalLength){
         for(int i = 0; i < additionalLength; ++i)
             positions.add(new Point(positions.get(positions.size() - 1)));
@@ -62,28 +69,6 @@ public abstract class Snake {
     public void increaseThickness()
     {
         thickness = (int)Math.min(Math.max(Math.floor(length / (float)MIN_THICKNESS), MIN_THICKNESS), MAX_THICKNESS);
-    }
-
-    public void move(){
-
-        switch(direction){
-            case LEFT:
-                positionX -= speed;
-                break;
-            case RIGHT:
-                positionX += speed;
-                break;
-            case UP:
-                positionY -= speed;
-                break;
-            case DOWN:
-                positionY += speed;
-                break;
-        }
-
-        for(int i = length - 1; i > 0; --i)
-            positions.set(i, positions.get(i - 1));
-        positions.set(0, new Point(positionX, positionY));
     }
 
     public Point getHeadPoint()
@@ -105,30 +90,6 @@ public abstract class Snake {
                 break;
         }
         return headPoint;
-    }
-
-    public void draw(Graphics g, int x, int y) {
-
-        drawTongue(g, x, y);
-        g.setColor(color);
-        g.fillOval(x, y, thickness, thickness);
-        Point startPoint = positions.get(0);
-        int t = thickness;
-        for (int i = 0; i < length; ++i) {
-            if(hasStripes && i % stripesThickness < stripesThickness / 2) g.setColor(color);
-            else g.setColor(stripesColor);
-            Point position = positions.get(i);
-            int diffX = position.x - startPoint.x;
-            int diffY = position.y - startPoint.y;
-            int xx = x + diffX;
-            int yy = y + diffY;
-            // narrowing the snake with coefficient 1.8 (tail)
-            if(i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
-            int xCoordinate = xx + (thickness - t) / 2;
-            int yCoordinate = yy + (thickness - t) / 2;
-            g.fillOval(xCoordinate, yCoordinate, t, t);
-        }
-       drawEyes(g, x, y);
     }
 
     public void drawEyes(Graphics g, int x, int y) {
@@ -190,28 +151,44 @@ public abstract class Snake {
         }
     }
 
-    public boolean checkCollisions(ArrayList<Coin> coins, boolean[][] hashTableCoins, int UNIT_SIZE,
-                                   int MAP_WIDTH, int MAP_HEIGHT){
+    public abstract boolean checkCollisions(ArrayList<Coin> coins, boolean[][] hashTableCoins, int UNIT_SIZE,
+                                   int MAP_WIDTH, int MAP_HEIGHT, ArrayList<Snake> enemies, ArrayList<Bomb> bombs);
 
-        checkCoinsCollisions(coins, hashTableCoins);
-        return checkBombCollisions() || checkOwnCollisions() || checkSnakesCollisions() ||
-                checkBorderCollisions(UNIT_SIZE, MAP_WIDTH, MAP_HEIGHT);
+    public boolean checkBombCollisions(ArrayList<Bomb> bombs, boolean[][] hashTableCoins)
+    {
+        int r = thickness / 2;
+        int x = positionX;
+        int y = positionY;
+
+        for(int i = 0; i < bombs.size(); ++i)
+        {
+            Bomb b = bombs.get(i);
+            int br = Bomb.getSize() / 2;
+            Point p = b.getPoint();
+            int bx = p.x + br;
+            int by = p.y + br;
+            if(circleIntersection(x, y, bx, by, r, br)){
+                hashTableCoins[p.x][p.y] = false;
+                bombs.remove(b);
+                return true;
+            }
+        }
+        return false;
     }
-
-    private void checkCoinsCollisions(ArrayList<Coin> coins, boolean[][] hashTableCoins){
+    protected void checkCoinsCollisions(ArrayList<Coin> coins, boolean[][] hashTableCoins){
 
         int r = thickness / 2;
-        int x = positionX + thickness / 2;
-        int y = positionY + thickness / 2;
+        int x = positionX;
+        int y = positionY;
 
         for(int i = 0; i < coins.size(); ++i)
         {
             Coin c = coins.get(i);
-            int cr = c.getSize();
+            int cr = c.getSize() / 2;
             Point p = c.getPoint();
-            int cx = p.x + cr / 2;
-            int cy = p.y + cr / 2;
-            if(circleIntersection(x, y, cx, cy, r, cr)){
+            int cx = p.x + cr;
+            int cy = p.y + cr;
+            if(circleIntersection(x, y, cx, cy, r, cr / 2)){
                 this.grow(c.getAdditionalLength());
                 hashTableCoins[p.x][p.y] = false;
                 coins.remove(c);
@@ -219,11 +196,7 @@ public abstract class Snake {
         }
     }
 
-    private boolean checkBombCollisions(){
-        return false;
-    }
-
-    private boolean checkOwnCollisions()
+    protected boolean checkOwnCollisions()
     {
         Point headPoint  = getHeadPoint();
         int t = thickness;
@@ -240,14 +213,34 @@ public abstract class Snake {
         return false;
     }
 
-    private boolean checkBorderCollisions(int UNIT_SIZE, int MAP_WIDTH, int MAP_HEIGHT)
+    protected boolean checkBorderCollisions(int UNIT_SIZE, int MAP_WIDTH, int MAP_HEIGHT)
     {
         Point headPoint = getHeadPoint();
         return headPoint.x <= UNIT_SIZE || headPoint.x >= MAP_WIDTH - UNIT_SIZE ||
                 headPoint.y <= UNIT_SIZE || headPoint.y >= MAP_HEIGHT - UNIT_SIZE;
     }
 
-    private boolean checkSnakesCollisions(){
+    protected boolean checkSnakesCollisions(ArrayList<Snake> enemies)
+    {
+        for(int i = 0; i < enemies.size(); ++i)
+        {
+            Snake enemy = enemies.get(i);
+            Point headPoint  = getHeadPoint();
+            int tt = enemy.getThickness();
+            int t = tt;
+            int enemyLength = enemy.getLength();
+            for (int j = 0; j < enemyLength; ++j) {
+                // narrowing the snake with coefficient 1.8 (tail)
+                if(i > enemyLength - (int) (1.8 * tt) && i % 2 == 0) --t;
+                int radius = t / 2;
+                int x = enemy.positions.get(j).x + radius;
+                int y = enemy.positions.get(j).y + radius;
+                if(pointInsideCircle(headPoint, x, y, radius)) {
+                    enemy.grow(length);
+                    return true;
+                }
+            }
+        }
         return false;
     }
 

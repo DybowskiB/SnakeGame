@@ -6,8 +6,9 @@ import java.awt.*;
 
 public class StandardCoin extends Coin{
 
+    public static int ADDITIONAL_LENGTH = 1;
     public StandardCoin(Point p){
-        super(4, p, Color.yellow, 5);
+        super(ADDITIONAL_LENGTH, p, Color.green, 8);
     }
 
     @Override

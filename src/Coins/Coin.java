@@ -1,10 +1,11 @@
 package Coins;
 
 import Heroes.Snake;
+import Objects.MapObject;
 
 import java.awt.*;
 
-public abstract class Coin {
+public abstract class Coin extends MapObject {
 
     protected int additionalLength;
     protected Point point;
@@ -32,11 +33,13 @@ public abstract class Coin {
         return size;
     }
 
+    @Override
     public void setPoint(Point point) {
         this.point = point;
     }
     public abstract void grow(Snake snake);
 
+    @Override
     public void draw(int x_left, int x_right, int y_up, int y_down, Graphics g){
         if(x_left <= point.x && point.x <= x_right && y_up <= point.y && point.y <= y_down){
             g.setColor(color);
