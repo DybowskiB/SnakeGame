@@ -6,6 +6,7 @@ import Objects.Bomb;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.concurrent.Semaphore;
 
 public abstract class Snake {
     public int positionX;
@@ -13,6 +14,7 @@ public abstract class Snake {
     public ArrayList<Point> positions;
 
     protected int length = 50;
+
     private final int MIN_THICKNESS = 10;
     private final int MAX_THICKNESS = 30;
     protected int thickness = MIN_THICKNESS;
@@ -27,8 +29,14 @@ public abstract class Snake {
     protected Color stripesColor;
     protected int stripesThickness;
 
+    protected int lengthToAdd = 0;
+
     public int getLength() {
         return length;
+    }
+
+    public int getPositionLength() {
+        return positions.size();
     }
 
     public void setLength(int length){this.length = length; }
@@ -54,12 +62,21 @@ public abstract class Snake {
     // Abstract methods
     public abstract void preparePositions();
     public abstract void move();
-    public abstract void draw(Graphics g, int x, int y);
+    public abstract void draw(Graphics g, int x, int y, Semaphore mutex);
     public void grow(int additionalLength){
-        for(int i = 0; i < additionalLength; ++i)
-            positions.add(new Point(positions.get(positions.size() - 1)));
+        if(additionalLength > 0) {
+            lengthToAdd += additionalLength;
+        }
         this.length += additionalLength;
-        increaseThickness();
+    }
+
+    protected void addPosition()
+    {
+        if(lengthToAdd > 0) {
+            positions.add(new Point(positions.get(positions.size() - 1)));
+            increaseThickness();
+            --lengthToAdd;
+        }
     }
 
     // Other methods
@@ -188,7 +205,7 @@ public abstract class Snake {
             Point p = c.getPoint();
             int cx = p.x + cr;
             int cy = p.y + cr;
-            if(circleIntersection(x, y, cx, cy, r, cr / 2)){
+            if(circleIntersection(x, y, cx, cy, r, cr)){
                 this.grow(c.getAdditionalLength());
                 hashTableCoins[p.x][p.y] = false;
                 coins.remove(c);
@@ -200,7 +217,7 @@ public abstract class Snake {
     {
         Point headPoint  = getHeadPoint();
         int t = thickness;
-        for (int i = 1; i < length; ++i) {
+        for (int i = 1; i < positions.size(); ++i) {
             Point position = positions.get(i);
             // narrowing the snake with coefficient 1.8 (tail)
             if(i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
@@ -228,7 +245,7 @@ public abstract class Snake {
             Point headPoint  = getHeadPoint();
             int tt = enemy.getThickness();
             int t = tt;
-            int enemyLength = enemy.getLength();
+            int enemyLength = enemy.getPositionLength();
             for (int j = 0; j < enemyLength; ++j) {
                 // narrowing the snake with coefficient 1.8 (tail)
                 if(i > enemyLength - (int) (1.8 * tt) && i % 2 == 0) --t;

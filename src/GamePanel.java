@@ -25,16 +25,18 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Random;
+import java.util.concurrent.Semaphore;
 
 public class GamePanel extends JPanel implements ActionListener {
 
     private final int SCREEN_WIDTH = 800;
     private final int SCREEN_HEIGHT = 600;
-    private final int MAP_WIDTH = 10000;
-    private final int MAP_HEIGHT = 10000;
+    private final int MAP_WIDTH = 5000;
+    private final int MAP_HEIGHT = 5000;
     private final int UNIT_SIZE = 50;
-    private final int MIN_NUM_OF_COINS = 10000;
-    private int MIN_NUM_OF_BOMBS = 500;
+    private final int MIN_NUM_OF_COINS = 5000;
+    private final int MIN_NUM_OF_BOMBS = 1000;
+    private int numberOfBombs = 500;
     private final Timer timer;
     private Random random;
     private int level = 0;
@@ -56,13 +58,17 @@ public class GamePanel extends JPanel implements ActionListener {
     private int moveMapPosition = 0;
 
     private int highScore;
-    private String resultHistoryFileName = "./results";
+    private String resultHistoryFileName = "./results.xml";
+
+    Semaphore mutex;
 
     public GamePanel(){
         this.setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
         this.setBackground(Color.gray);
         this.setFocusable(true);
         this.addKeyListener(new MyKeyAdapter());
+
+        this.mutex = new Semaphore(1);
 
         final int DELAY = 10;
         this.timer = new Timer(DELAY, this);
@@ -79,9 +85,10 @@ public class GamePanel extends JPanel implements ActionListener {
         this.random = new Random();
         hero = new SnakeHero(MAP_WIDTH / 2, MAP_HEIGHT / 2, Color.magenta, Color.GRAY, Color.blue);
         prepareCoins();
+        if(level > 1) numberOfBombs = (level + 1) * MIN_NUM_OF_BOMBS;
+        else numberOfBombs = MIN_NUM_OF_BOMBS;
         prepareBombs();
-        enemiesCount = (level + 1) * 7;
-        MIN_NUM_OF_BOMBS = (level + 1) * 500;
+        enemiesCount = (level + 1) * 2;
         prepareEnemies();
 
         resultColor = Color.lightGray;
@@ -143,7 +150,7 @@ public class GamePanel extends JPanel implements ActionListener {
                 Snake snake = new SnakeHero(MAP_WIDTH / 2, MAP_HEIGHT / 2, Color.magenta,
                         Color.GRAY, Color.blue);
                 snake.draw(g, SCREEN_WIDTH / 2 - snake.getThickness() / 2,
-                        SCREEN_HEIGHT / 2 - snake.getThickness() / 2);
+                        SCREEN_HEIGHT / 2 - snake.getThickness() / 2, mutex);
 
                 drawInstruction(g, "Press space to start game");
                 drawLevels(g);
@@ -343,18 +350,19 @@ public class GamePanel extends JPanel implements ActionListener {
 
     private void drawCoins(int x_left, int x_right, int y_up, int y_down, Graphics g)
     {
-        coins.forEach(c -> c.draw(x_left, x_right, y_up, y_down, g));
+        coins.parallelStream().forEach(c -> c.draw(x_left, x_right, y_up, y_down, g, mutex));
     }
 
     private void drawBombs(int x_left, int x_right, int y_up, int y_down, Graphics g)
     {
-        bombs.forEach(c -> c.draw(x_left, x_right, y_up, y_down, g));
+        bombs.parallelStream().forEach(c -> c.draw(x_left, x_right, y_up, y_down, g, mutex));
     }
 
+    int x, y;
     private void drawHero(int x_left, int x_right, int y_up, int y_down, Graphics g)
     {
-        int x = SCREEN_WIDTH / 2 - hero.getThickness() / 2;
-        int y = SCREEN_HEIGHT / 2 - hero.getThickness() / 2;
+        x = SCREEN_WIDTH / 2 - hero.getThickness() / 2;
+        y = SCREEN_HEIGHT / 2 - hero.getThickness() / 2;
         if(x_left == 0)
             x = hero.positionX - hero.getThickness() / 2;
         if(x_right == MAP_WIDTH)
@@ -363,12 +371,15 @@ public class GamePanel extends JPanel implements ActionListener {
             y = hero.positionY - hero.getThickness() / 2;
         if(y_down == MAP_HEIGHT)
             y = SCREEN_HEIGHT - (y_down - hero.positionY) - hero.getThickness() / 2;
-        hero.draw(g, x, y);
+        Thread thread = new Thread(() -> hero.draw(g, x, y, mutex));
+        thread.start();
+        try {thread.join();}
+        catch(Exception e){e.printStackTrace();}
     }
 
     public void drawEnemies(int x_left, int y_up, Graphics g)
     {
-        enemies.forEach(r -> r.draw(g, x_left, y_up));
+        enemies.parallelStream().forEach(r -> r.draw(g, x_left, y_up, mutex));
     }
 
     public void drawResult(Graphics g)
@@ -393,7 +404,7 @@ public class GamePanel extends JPanel implements ActionListener {
     }
     public void moveEnemies()
     {
-        enemies.forEach(Snake::move);
+        enemies.parallelStream().forEach(Snake::move);
     }
 
     public void checkCollisions()
@@ -471,7 +482,7 @@ public class GamePanel extends JPanel implements ActionListener {
 
     private void prepareBombs(){
         bombs = new ArrayList<>();
-        for(int i = 0; i < MIN_NUM_OF_BOMBS; i++)
+        for(int i = 0; i < numberOfBombs; i++)
             addBomb();
     }
 
@@ -500,8 +511,8 @@ public class GamePanel extends JPanel implements ActionListener {
 
     private void updateBombs()
     {
-        if(bombs.size() >= MIN_NUM_OF_BOMBS) return;
-        for(int i = MIN_NUM_OF_BOMBS - coins.size(); i > 0; --i)
+        if(bombs.size() >= numberOfBombs) return;
+        for(int i = numberOfBombs - coins.size(); i > 0; --i)
             addBomb();
     }
 
@@ -523,8 +534,12 @@ public class GamePanel extends JPanel implements ActionListener {
                 hero.setLength(0);
                 endGame();
             }
-            if(hero != null)
-                hero.move();
+            if(hero != null) {
+                Thread thread = new Thread(() -> hero.move());
+                thread.start();
+                try {thread.join();}
+                catch(Exception exc){exc.printStackTrace();}
+            }
             moveEnemies();
             checkCollisions();
             updateCoins();

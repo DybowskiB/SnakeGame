@@ -6,20 +6,15 @@
     </artifacts-to-build>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fbcd5679-d779-4137-b694-b13982910d7e" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/Objects/MapObject.java" afterDir="false" />
+    <list default="true" id="fbcd5679-d779-4137-b694-b13982910d7e" name="Changes" comment="Coin collisions repaired.">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Coins/Coin.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Coins/Coin.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Coins/StandardCoin.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Coins/StandardCoin.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Coins/WrongCoin.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Coins/WrongCoin.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/GameFrame.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/GameFrame.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/GamePanel.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/GamePanel.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Heroes/Snake.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Heroes/Snake.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Heroes/SnakeEnemy.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Heroes/SnakeEnemy.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Heroes/SnakeHero.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Heroes/SnakeHero.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Objects/Bomb.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Objects/Bomb.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Result.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Result.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/SnakeGame.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/SnakeGame.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Objects/MapObject.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/Objects/MapObject.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -93,8 +88,16 @@
       <workItem from="1676332308967" duration="42706000" />
       <workItem from="1676425315425" duration="188000" />
       <workItem from="1676425563494" duration="1573000" />
-      <workItem from="1676474370961" duration="6240000" />
+      <workItem from="1676474370961" duration="22641000" />
     </task>
+    <task id="LOCAL-00001" summary="Coin collisions repaired.">
+      <created>1676480742061</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1676480742061</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -110,5 +113,9 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Coin collisions repaired." />
+    <option name="LAST_COMMIT_MESSAGE" value="Coin collisions repaired." />
   </component>
 </project>

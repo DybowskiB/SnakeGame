@@ -5,6 +5,7 @@ import Objects.Bomb;
 
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
 
 public class SnakeHero extends Snake{
 
@@ -45,34 +46,42 @@ public class SnakeHero extends Snake{
                 break;
         }
 
-        for(int i = length - 1; i > 0; --i)
-            positions.set(i, positions.get(i - 1));
-        positions.set(0, new Point(positionX, positionY));
+        addPosition();
+        positions.add(0, new Point(positionX, positionY));
+        positions.remove(positions.size() - 1);
     }
 
     @Override
-    public void draw(Graphics g, int x, int y) {
+    public void draw(Graphics g, int x, int y, Semaphore mutex) {
 
-        drawTongue(g, x, y);
-        g.setColor(color);
-        g.fillOval(x, y, thickness, thickness);
-        Point startPoint = positions.get(0);
-        int t = thickness;
-        for (int i = 0; i < length; ++i) {
-            if(hasStripes && i % stripesThickness < stripesThickness / 2) g.setColor(color);
-            else g.setColor(stripesColor);
-            Point position = positions.get(i);
-            int diffX = position.x - startPoint.x;
-            int diffY = position.y - startPoint.y;
-            int xx = x + diffX;
-            int yy = y + diffY;
-            // narrowing the snake with coefficient 1.8 (tail)
-            if(i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
-            int xCoordinate = xx + (thickness - t) / 2;
-            int yCoordinate = yy + (thickness - t) / 2;
-            g.fillOval(xCoordinate, yCoordinate, t, t);
+        try {
+            mutex.acquire();
+            drawTongue(g, x, y);
+            g.setColor(color);
+            g.fillOval(x, y, thickness, thickness);
+            Point startPoint = positions.get(0);
+            int t = thickness;
+            for (int i = 0; i < positions.size(); i += thickness / 6) {
+                if (hasStripes && i % stripesThickness < stripesThickness / 2) g.setColor(color);
+                else g.setColor(stripesColor);
+                Point position = positions.get(i);
+                int diffX = position.x - startPoint.x;
+                int diffY = position.y - startPoint.y;
+                int xx = x + diffX;
+                int yy = y + diffY;
+                // narrowing the snake with coefficient 1.8 (tail)
+                if (i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
+                int xCoordinate = xx + (thickness - t) / 2;
+                int yCoordinate = yy + (thickness - t) / 2;
+                g.fillOval(xCoordinate, yCoordinate, t, t);
+            }
+            drawEyes(g, x, y);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            mutex.release();
         }
-        drawEyes(g, x, y);
+
     }
 
     @Override

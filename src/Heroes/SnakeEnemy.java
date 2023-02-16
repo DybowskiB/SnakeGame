@@ -6,6 +6,7 @@ import Objects.Bomb;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Random;
+import java.util.concurrent.Semaphore;
 
 public class SnakeEnemy extends Snake{
 
@@ -145,30 +146,36 @@ public class SnakeEnemy extends Snake{
                 break;
         }
 
-        for(int i = length - 1; i > 0; --i)
-            positions.set(i, positions.get(i - 1));
-        positions.set(0, new Point(positionX, positionY));
+        addPosition();
+        positions.add(0, new Point(positionX, positionY));
+        positions.remove(positions.size() - 1);
     }
 
     @Override
-    public void draw(Graphics g, int x, int y)
+    public void draw(Graphics g, int x, int y, Semaphore mutex)
     {
-        int t = thickness;
-        for(int i = 0; i < length; ++i)
-        {
-            int px = positions.get(i).x;
-            int py = positions.get(i).y;
-            if(i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
-            if(px > x - t && px < x + t + SCREEN_WIDTH && py > y - t && py < y + t + SCREEN_HEIGHT)
-            {
-                int xCoordinate = px - x + (thickness - t) / 2;
-                int yCoordinate = py - y + (thickness - t) / 2;
-                if(i == 0) drawTongue(g, px - x, py - y);
-                g.setColor(color);
-                g.fillOval(xCoordinate, yCoordinate, t, t);
+        try {
+            mutex.acquire();
+            int t = thickness;
+            for (int i = 0; i < positions.size(); i += thickness / 4) {
+                int px = positions.get(i).x;
+                int py = positions.get(i).y;
+                if (i > length - (int) (1.8 * thickness) && i % 2 == 0) --t;
+                if (px > x - t && px < x + t + SCREEN_WIDTH && py > y - t && py < y + t + SCREEN_HEIGHT) {
+                    int xCoordinate = px - x + (thickness - t) / 2;
+                    int yCoordinate = py - y + (thickness - t) / 2;
+                    if (i == 0) drawTongue(g, px - x, py - y);
+                    g.setColor(color);
+                    g.fillOval(xCoordinate, yCoordinate, t, t);
+                }
             }
+            drawEyes(g, positions.get(0).x - x, positions.get(0).y - y);
+
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            mutex.release();
         }
-        drawEyes(g, positions.get(0).x - x, positions.get(0).y - y);
     }
 
     @Override

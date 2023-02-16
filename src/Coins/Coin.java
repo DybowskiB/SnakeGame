@@ -4,6 +4,7 @@ import Heroes.Snake;
 import Objects.MapObject;
 
 import java.awt.*;
+import java.util.concurrent.Semaphore;
 
 public abstract class Coin extends MapObject {
 
@@ -40,10 +41,17 @@ public abstract class Coin extends MapObject {
     public abstract void grow(Snake snake);
 
     @Override
-    public void draw(int x_left, int x_right, int y_up, int y_down, Graphics g){
-        if(x_left <= point.x && point.x <= x_right && y_up <= point.y && point.y <= y_down){
-            g.setColor(color);
-            g.fillOval(point.x - x_left, point.y - y_up, size, size);
+    public void draw(int x_left, int x_right, int y_up, int y_down, Graphics g, Semaphore mutex){
+        if (x_left <= point.x && point.x <= x_right && y_up <= point.y && point.y <= y_down) {
+            try {
+                mutex.acquire();
+                g.setColor(color);
+                g.fillOval(point.x - x_left, point.y - y_up, size, size);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                mutex.release();
+            }
         }
     }
 }
